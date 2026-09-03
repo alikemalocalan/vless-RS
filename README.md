@@ -1,4 +1,4 @@
-# 🛡️ VLESS + RAW + REALITY (Rust) — Sansürsüz İnternet Tüneli
+# 🛡️ vless-RS — Sansürsüz VLESS + REALITY İnternet Tüneli
 
 > **Ağır DPI Sansürüne Karşı Saf Rust ile Geliştirilmiş, Sıfır Bağımlılıklı, Tek Binary VLESS-REALITY Sunucusu**  
 > *Rusya TSPU (ТСПУ), İran ve benzeri gelişmiş sansür sistemlerini meşru Apple/Google TLS kamuflajı ile atlatmak üzere tasarlanmıştır.*
@@ -46,7 +46,7 @@ Trafiği gizlemeye çalışmak yerine **tamamen meşru bir HTTPS trafiğine bür
                  │  - SNI: gateway.icloud.com
                  │  - SessionID: İstemci X25519 Açık Anahtarı + ShortID
                  ▼
-      [ vless-vpn (Port 443 / TCP Proxy) ]
+      [ vless-RS (Port 443 / TCP Proxy) ]
                  │
                  ├──► [1. TLS ClientHello Koklama (Sniffing)]
                  │
@@ -136,10 +136,10 @@ Railway panelindeki **Variables** sekmesinden özelleştirebileceğiniz ayarlar:
 cargo build --release
 
 # Varsayılan ayarlarla başlatma
-./target/release/vless-vpn
+./target/release/vless-RS
 
 # Özel parametrelerle başlatma
-./target/release/vless-vpn --port 443 --dest dl.google.com:443 --sni dl.google.com
+./target/release/vless-RS --port 443 --dest dl.google.com:443 --sni dl.google.com
 
 # Birim testlerini çalıştırma
 cargo test
