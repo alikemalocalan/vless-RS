@@ -20,17 +20,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install official Xray-core for REALITY TLS 1.3 engine
+# Install pure Rust shoes engine (Ultra-low ~12MB RAM, VLESS + REALITY + Vision)
 RUN ARCH=$(uname -m) && \
     case "$ARCH" in \
-      x86_64) XRAY_ARCH="64" ;; \
-      aarch64) XRAY_ARCH="arm64-v8a" ;; \
-      *) XRAY_ARCH="64" ;; \
+      x86_64) SHOES_ARCH="x86_64" ;; \
+      aarch64) SHOES_ARCH="aarch64" ;; \
+      *) SHOES_ARCH="x86_64" ;; \
     esac && \
-    curl -sL "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${XRAY_ARCH}.zip" -o /tmp/xray.zip && \
-    unzip -q /tmp/xray.zip -d /usr/local/bin xray && \
-    chmod +x /usr/local/bin/xray && \
-    rm -rf /tmp/xray.zip
+    curl -sL "https://github.com/cfal/shoes/releases/download/v0.2.7/shoes-${SHOES_ARCH}-unknown-linux-musl.tar.gz" -o /tmp/shoes.tar.gz && \
+    tar -xzf /tmp/shoes.tar.gz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/shoes && \
+    rm -rf /tmp/shoes.tar.gz
 
 WORKDIR /app
 

@@ -17,6 +17,60 @@ fn generate_ascii_qr(data: &str) -> Option<String> {
 
 use std::path::PathBuf;
 
+fn find_shoes_binary() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("SHOES_PATH") {
+        let pb = PathBuf::from(p);
+        if pb.exists() {
+            return Some(pb);
+        }
+    }
+    for candidate in &["/usr/local/bin/shoes", "/app/shoes", "/tmp/shoes"] {
+        let pb = PathBuf::from(candidate);
+        if pb.exists() {
+            return Some(pb);
+        }
+    }
+    if let Ok(out) = std::process::Command::new("which").arg("shoes").output() {
+        if out.status.success() {
+            let path_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !path_str.is_empty() {
+                return Some(PathBuf::from(path_str));
+            }
+        }
+    }
+    None
+}
+
+pub fn generate_shoes_config(config: &ServerConfig) -> String {
+    let priv_key_b64 = base64::Engine::encode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        config.private_key.as_bytes(),
+    );
+    let short_id_hex = hex::encode(&config.short_id);
+
+    format!(
+r#"- address: "{}"
+  protocol:
+    type: tls
+    reality_targets:
+      "{}":
+        private_key: "{}"
+        short_ids: ["{}"]
+        dest: "{}"
+        vision: true
+        protocol:
+          type: vless
+          user_id: "{}"
+"#,
+        config.listen_addr,
+        config.server_name,
+        priv_key_b64,
+        short_id_hex,
+        config.dest_target,
+        config.user_uuid
+    )
+}
+
 fn find_xray_binary() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("XRAY_PATH") {
         let pb = PathBuf::from(p);
@@ -157,7 +211,25 @@ pub async fn run_server(config: Arc<ServerConfig>) -> Result<()> {
     println!("  SHORT_ID={}", short_id_hex);
     println!("===============================================================================\n");
 
-    // If Xray engine is available, run Xray for full XTLS-Vision + REALITY TLS 1.3 support
+    // 1. Priority: Pure Rust shoes engine (Ultra-low ~12 MB RAM, VLESS + REALITY + Vision)
+    if let Some(shoes_path) = find_shoes_binary() {
+        tracing::info!("Starting pure Rust shoes REALITY engine (~12 MB RAM) from {:?}", shoes_path);
+        let shoes_config = generate_shoes_config(&config);
+        let config_path = std::env::temp_dir().join("shoes_config.yaml");
+        tokio::fs::write(&config_path, shoes_config).await?;
+
+        let mut child = tokio::process::Command::new(&shoes_path)
+            .arg(&config_path)
+            .spawn()?;
+
+        let status = child.wait().await?;
+        if !status.success() {
+            anyhow::bail!("Shoes engine exited with status: {}", status);
+        }
+        return Ok(());
+    }
+
+    // 2. Fallback: Xray engine if available
     if let Some(xray_path) = find_xray_binary() {
         tracing::info!("Starting Xray-core REALITY engine from {:?}", xray_path);
         let xray_config = generate_xray_config(&config);
