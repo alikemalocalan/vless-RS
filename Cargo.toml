@@ -6,7 +6,7 @@ authors = ["Antigravity Engineering"]
 description = "High-performance standalone VLESS + RAW + REALITY server in Rust for DPI & TSPU circumvention"
 
 [dependencies]
-tokio = { version = "1.53.1", features = ["full"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "process", "fs", "io-util"] }
 x25519-dalek = { version = "3.0.0", features = ["static_secrets"] }
 uuid = { version = "1.26.0", features = ["v4", "fast-rng"] }
 clap = { version = "4.6.6", features = ["derive", "env"] }

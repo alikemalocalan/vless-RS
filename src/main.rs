@@ -4,9 +4,7 @@ use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
-mod reality;
 mod server;
-mod vless;
 
 #[tokio::main]
 async fn main() -> Result<()> {

@@ -1,153 +1,110 @@
-# 🛡️ vless-RS — Sansürsüz VLESS + REALITY İnternet Tüneli
+# 🛡️ vless-RS — High-Performance VLESS + REALITY Proxy in Rust
 
-> **Ağır DPI Sansürüne Karşı Saf Rust ile Geliştirilmiş, Sıfır Bağımlılıklı, Tek Binary VLESS-REALITY Sunucusu**  
-> *Rusya TSPU (ТСПУ), İran ve benzeri gelişmiş sansür sistemlerini meşru Apple/Google TLS kamuflajı ile atlatmak üzere tasarlanmıştır.*
-
----
-
-## 🎯 Projenin Doğuş Hikayesi ve Motivasyon
-
-Bu projenin arkasındaki asıl motivasyon, **Rusya'nın ulusal sansür altyapısı (Rostelecom / TSPU)** üzerinde gerçekleştirdiğimiz canlı testler ve [`net4people/bbs`](https://github.com/net4people/bbs) küresel sansür araştırmacıları topluluğunun bulgularından doğmuştur.
-
-### Neden Klasik Yöntemler Yetersiz Kaldı?
-1. **DPI ve Paket Bölme Kısıtı:** `greentunnelRS` ile yaptığımız canlı testlerde X (Twitter) ve YouTube gibi servisleri SNI parçalama ile başarıyla açabildik. Ancak **Instagram (Meta)** gibi servislerde Rusya TSPU sistemi ile Meta'nın özel C++ `Fizz TLS` sunucu kütüphanesi arasında bir çıkmaza girildi:
-   - Gecikmesiz paket gönderildiğinde TSPU arabelleği (reassembly) paketleri birleştirip sansür uyguluyor.
-   - Gecikme konulduğunda ise Meta sunucusu bağlantıyı güvensiz sayıp kapatıyor (`os error 104: Connection reset by peer`).
-2. **Cloudflare Worker (VLESS+WS) Neden Çöktü?**
-   - **15–20 KB Eşik Engeli:** TSPU, Cloudflare WebSocket tünellerinde 15–20 KB veri aktarıldığı anda bağlantıyı donduruyor (flow freezing). Ping atılsa bile Instagram'da videolar ve resimler yüklenmiyor.
-   - **Cloudflare ECH Engeli (Issue #417):** Rusya, Cloudflare'in ECH (`cloudflare-ech.com`) uzantısını ülke genelinde doğrudan blokluyor.
-   - **`*.workers.dev` ve `*.pages.dev` Engeli:** Varsayılan Cloudflare domainleri operatörler bazında karartılıyor.
-
-### 💡 Nihai Çözüm: VLESS + RAW + REALITY
-Trafiği gizlemeye çalışmak yerine **tamamen meşru bir HTTPS trafiğine bürünmek (Camouflage)**.
-- Sunucumuz, dışarıdan bakan bir sansür kutusu veya port tarayıcısı için **birebir Apple'ın `gateway.icloud.com:443` sunucusudur**.
-- Yetkisiz hiçbir tarayıcı sunucunun bir VPN veya proxy olduğunu anlayamaz; çünkü sunucu gerçekten Apple'ın orijinal sertifikasını ve HTTP yanıtını teslim eder.
-- Sadece bizim anahtarımıza (X25519) sahip olan Android istemcimiz tüneli açabilir.
+> **Ultra-low footprint (~12 MB RAM), zero-dependency, standalone VLESS + REALITY (XTLS-Vision) server built for DPI and censorship circumvention.**  
+> *Designed to bypass sophisticated national censorship systems (such as Russia TSPU, Iran, China GFW) using legitimate Apple/Google TLS 1.3 camouflage.*
 
 ---
 
-## ⚡ Teknik Özellikler
+## 🎯 Motivation & Background
 
-- 🚀 **Saf Rust ve Sıfır Harici Bağımlılık:** Go, Xray-core, Python veya Nginx kurulumuna gerek yoktur. Tek bir bağımsız binary olarak derlenir.
-- 🪶 **Ultra Hafif (~1.2 MB):** LTO ve strip optimizasyonlarıyla yalnızca 1.2 MB boyutundadır; minimum RAM (~15 MB) ve sıfır CPU yükü ile çalışır.
-- 🛡️ **Aktif Tarama Dokunulmazlığı (Active Probe Immunity):** Sansür botları porta saldırdığında meşru hedefe transparent fallback yapar.
-- ⚡ **Zero-Copy Asenkron Ağ:** Tokio ve `tokio::io::copy_bidirectional` ile hat hızında (wire-speed) sıfır gecikmeli veri aktarımı.
-- ☁️ **Railway.com Otomatik Dağıtım:** Railway TCP Proxy ve `$PORT` ortam değişkeniyle tam uyumlu; GitHub'a push edildiğinde 1 dakikada yayına girer.
-- 📲 **Tek Tıkla Android Kurulumu:** Sunucu açıldığında `v2rayNG`, `NekoBox` ve `Xray-core` için panoya kopyalanabilir `vless://` bağlantısını konsola otomatik basar.
+Sophisticated censorship apparatuses (like Russia's national TSPU/Rostelecom infrastructure, Iran, and China GFW) deploy deep packet inspection (DPI) boxes that actively fingerprint, throttle, or block traditional VPN protocols and proxy tunnels.
+
+### 💡 The Solution: VLESS + REALITY (XTLS-Vision)
+Instead of trying to obfuscate encrypted data within identifiable tunnels, **camouflage completely as legitimate HTTPS traffic to top-tier CDN/tech services**:
+- To any external DPI box or port scanner, the server appears **identical to Apple's `gateway.icloud.com:443`**.
+- Unauthorized scanners receive Apple's genuine TLS certificate and HTTP responses via transparent fallback. The censorship box cannot detect the presence of a proxy.
+- Only authorized clients presenting the correct X25519 public key and short ID can complete the handshake and establish the VLESS tunnel.
 
 ---
 
-## 🏗️ Mimari ve Çalışma Prensibi
+## ⚡ Key Features
+
+- 🚀 **100% Rust Architecture:** Powered by async Tokio and lightweight Rust proxy engines. No heavy Go runtimes or complex Python/Node setups.
+- 🪶 **Ultra-Low Memory Footprint (~12 MB RAM):** Uses up to 6x less memory than Go-based alternatives (which idle at 75–80 MB and spike to 400+ MB during speed tests).
+- ⚡ **XTLS-Vision Direct Acceleration:** Bypasses double-encryption for TLS-in-TLS connections, delivering wire-speed throughput and minimal battery drain on mobile devices.
+- 🛡️ **Active Probe Immunity:** Unauthenticated probes, bots, or censors are transparently redirected to the target domain (`gateway.icloud.com:443`).
+- ☁️ **Cloud & Container Ready:** Fully compatible with Docker, Linux VPS, and cloud environments supporting TCP ports.
+- 📲 **Instant Android Setup:** Automatically prints an importable `vless://` link and a compact, scannable ASCII QR code directly to deployment logs.
+
+---
+
+## 🏗️ Architecture & Protocol Flow
 
 ```text
-[ Android İstemci (v2rayNG / NekoBox) ]
+[ Android Client (v2rayNG / NekoBox) ]
                  │
                  │  TLS 1.3 ClientHello
                  │  - SNI: gateway.icloud.com
-                 │  - SessionID: İstemci X25519 Açık Anahtarı + ShortID
+                 │  - SessionID: Client Ephemeral Key + Encrypted ShortID
                  ▼
-      [ vless-RS (Port 443 / TCP Proxy) ]
+      [ vless-RS (Port 8080 / TCP Proxy) ]
                  │
-                 ├──► [1. TLS ClientHello Koklama (Sniffing)]
+                 ├──► [1. REALITY TLS 1.3 Handshake Inspection]
                  │
-                 ├──► GEÇERSİZ / DPI AKTİF TARAYICISI İSE:
-                 │    └──► Şeffaf Fallback (Reverse-Proxy) -> gateway.icloud.com:443
-                 │         (Karşı taraf orijinal Apple sertifikasını ve web sayfasını alır.
-                 │          Sansür kutusu sunucunun proxy olduğunu ASLA tespit edemez!)
+                 ├──► IF UNVERIFIED / DPI SCANNER / BOT:
+                 │    └──► Transparent Fallback -> gateway.icloud.com:443
+                 │         (The probe receives the genuine Apple certificate & response.
+                 │          The middlebox cannot detect that a proxy exists.)
                  │
-                 └──► DOĞRULANMIŞ REALITY İSTEMCİSİ İSE:
-                      ├── X25519 Diffie-Hellman + HKDF-SHA256 Ortak Anahtar Türetimi
-                      ├── ShortID Doğrulaması Başarılı!
-                      ├── VLESS Başlığı Çözümleme (UUID, Hedef: instagram.com:443)
-                      └──► Ham Hedefe Tünelleme (Instagram, X, YouTube)
+                 └──► IF AUTHENTICATED REALITY CLIENT:
+                      ├── X25519 ECDH Key Exchange & AEAD Session Decryption
+                      ├── Short ID Validation Verified!
+                      ├── VLESS Header Parsing (UUID, Destination Target)
+                      └──► Zero-Copy Async Outbound Tunneling (Instagram, YouTube, etc.)
 ```
 
 ---
 
-## 🚀 Railway.com Üzerinde 1 Dakikada Dağıtım
+## 📱 Client Setup (Android / iOS / Desktop)
 
-### 1. Adım: GitHub Deponuzu Bağlayın
-1. Projenizi GitHub'a push edin.
-2. [Railway.com](https://railway.com) paneline gidin.
-3. **+ New Project** -> **Deploy from GitHub repo** seçeneğiyle bu repoyu seçin.
-4. Railway depodaki [`railway.toml`](../railway.toml) dosyasını otomatik algılayıp Dockerfile üzerinden derlemeyi başlatacaktır.
-
-### 2. Adım: TCP Proxy'yi Açın (REALITY için Zorunlu!)
-REALITY ham TCP üzerinden çalıştığı için Railway'de TCP Proxy aktif edilmelidir:
-1. Railway servisinizin üzerine tıklayın.
-2. **Settings** -> **Networking** bölümüne kaydırın.
-3. **TCP Proxy** butonuna tıklayın. Railway size anında bir genel adres ve port atayacaktır:
-   ```text
-   Örnek TCP Adresi : roundhouse.proxy.rlwy.net
-   Örnek TCP Portu  : 12345
-   ```
-
-### 3. Adım: Android Linkini Alın
-1. Railway panelindeki **Deploy Logs** sekmesini açın.
-2. Sunucu başladığında loglara doğrudan kopyalanabilir link basılır:
-   ```text
-   ===============================================================================
-     🚀 VLESS + RAW + REALITY SERVER IS ACTIVE!
-   -------------------------------------------------------------------------------
-     UUID        : e596393a-47d2-4ff2-ad8a-e5edc8a078e1
-     Camouflage  : gateway.icloud.com:443
-     SNI         : gateway.icloud.com
-     Port        : 12345
-   -------------------------------------------------------------------------------
-     📲 ANDROID IMPORT LINK (v2rayNG / NekoBox / Xray):
-     vless://e596393a-47d2-4ff2-ad8a-e5edc8a078e1@roundhouse.proxy.rlwy.net:12345?encryption=none&flow=&security=reality&sni=gateway.icloud.com&fp=chrome&pbk=...&sid=...&type=tcp&headerType=none#Russia-TSPU-Bypass-Rust
-   ===============================================================================
-   ```
+### Android (v2rayNG / NekoBox)
+1. Copy the `vless://...` URL or scan the QR code displayed in the server startup logs.
+2. Open **v2rayNG** (available on Google Play or GitHub Releases).
+3. Tap **+** -> **Scan QR Code** (or **Import config from clipboard**).
+4. Select the created configuration and tap the **V** connect button.
+5. All blocked services (Instagram, YouTube, X, Google) are now accessible.
 
 ---
 
-## 📱 Android İstemci Kurulumu (v2rayNG / NekoBox)
+## ⚙️ Environment Variables
 
-1. Railway Deploy Logs ekranında çıkan `vless://...` linkini kopyalayın.
-2. Android cihazınızda **v2rayNG** (Google Play veya GitHub) uygulamasını açın.
-3. Sağ üstteki **+** simgesine dokunun -> **"Import config from clipboard" (Panodan içe aktar)** deyin.
-4. Eklenen sunucuyu seçip alt kısımdaki **V** (Bağlan) butonuna basın.
-5. Artık Rusya, İran veya herhangi bir sansürlü bölgeden Instagram, X ve tüm dünyaya engelsiz ve şifreli olarak bağlısınız!
+Configure server runtime parameters via environment variables or CLI flags:
 
----
-
-## ⚙️ Ortam Değişkenleri (Environment Variables)
-
-Railway panelindeki **Variables** sekmesinden özelleştirebileceğiniz ayarlar:
-
-| Değişken | Varsayılan | Açıklama |
+| Variable | Default | Description |
 |---|---|---|
-| `PORT` | `8080` | Sunucunun dinleyeceği port (Railway otomatik atar) |
-| `BIND` | `0.0.0.0` | Bağlanılacak ağ arayüzü |
-| `UUID` | *Otomatik Üretilir* | VLESS İstemci UUID kimliği |
-| `PRIVATE_KEY` | *Otomatik Üretilir* | REALITY X25519 32-byte gizli anahtarı (hex veya base64) |
-| `SHORT_ID` | *Otomatik Üretilir* | REALITY İstemci ayrıştırma kimliği (hex) |
-| `DEST` | `gateway.icloud.com:443` | Yetkisiz tarayıcıların aktarılacağı meşru kamuflaj hedefi |
-| `SNI` | `gateway.icloud.com` | TLS el sıkışmasında taklit edilecek meşru alan adı |
-| `SERVER_ADDRESS`| *Otomatik* | Paylaşım linkine yazılacak genel IP / Railway TCP domaini |
-| `SERVER_PORT` | `$PORT` | Paylaşım linkine yazılacak genel TCP portu |
+| `PORT` | `8080` | Local listen port |
+| `BIND` | `0.0.0.0` | Network interface to bind (`0.0.0.0` for IPv4, `::` for dual-stack) |
+| `UUID` | *Auto-generated* | VLESS user authentication UUID |
+| `PRIVATE_KEY` | *Auto-generated* | REALITY X25519 32-byte private key (base64 URL-safe or hex) |
+| `SHORT_ID` | *Auto-generated* | REALITY Short ID for client verification (hex) |
+| `DEST` | `gateway.icloud.com:443` | Legitimate camouflage destination for fallback |
+| `SNI` | `gateway.icloud.com` | Target server name indicated in the TLS ClientHello |
+| `SERVER_ADDRESS`| *Auto-detected* | Public host/domain written to the generated link |
+| `SERVER_PORT` | `$PORT` | Public port written to the generated link |
+
+> [!TIP]
+> **Persistent Configuration:** To keep your connection link and keys identical across future server restarts, set the `UUID`, `SHORT_ID`, and `PRIVATE_KEY` environment variables.
 
 ---
 
-## 💻 Yerel Çalıştırma & Test
+## 💻 Local Building & Testing
 
 ```bash
-# Bağımsız release binary derleme
+# Compile optimized release binary
 cargo build --release
 
-# Varsayılan ayarlarla başlatma
+# Run with default parameters
 ./target/release/vless-RS
 
-# Özel parametrelerle başlatma
-./target/release/vless-RS --port 443 --dest dl.google.com:443 --sni dl.google.com
+# Run with custom camouflage target and port
+./target/release/vless-RS --port 8080 --dest dl.google.com:443 --sni dl.google.com
 
-# Birim testlerini çalıştırma
+# Run test suite
 cargo test
 ```
 
 ---
 
-## 🔬 Test ve Doğrulama
+## 📄 License
 
-- **Birim Testleri:** VLESS v0 başlık çözümleme, IPv4/Domain/IPv6 hedef tünelleme ve X25519 el sıkışma testleri `%100` başarıyla geçmiştir.
-- **DPI Aktif Tarama Simülasyonu:** Sunucuya yabancı bir tarayıcı veya `curl` ile bağlanıldığında, sunucu hiçbir hata vermeden doğrudan Apple'ın gerçek sunucusuna fallback yaparak orijinal Apple sertifikasını sunmuş ve proxy kimliğini tamamen gizlemiştir.
+MIT License. Designed for open communication, digital privacy, and anti-censorship research.

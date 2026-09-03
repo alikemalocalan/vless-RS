@@ -1,12 +1,7 @@
 use anyhow::Result;
 use std::sync::Arc;
-use tokio::io::AsyncReadExt;
-use tokio::net::{TcpListener, TcpStream};
 
 use crate::config::ServerConfig;
-use crate::reality::fallback::handle_fallback;
-use crate::reality::handshake::{inspect_tls_client_hello, HandshakeVerdict};
-use crate::vless::protocol::{parse_vless_request, tunnel_vless_connection};
 
 fn generate_ascii_qr(data: &str) -> Option<String> {
     qrcode::QrCode::with_error_correction_level(data.as_bytes(), qrcode::EcLevel::L)
@@ -239,57 +234,8 @@ pub async fn run_server(config: Arc<ServerConfig>) -> Result<()> {
         return Ok(());
     }
 
-    // Fallback to internal server loop if xray binary is not present
-    tracing::info!(
-        "VLESS server listening on {} (Internal engine)",
-        config.listen_addr
+    // REALITY encryption is strictly required to bypass censorship
+    anyhow::bail!(
+        "No REALITY TLS engine (shoes or xray) found. REALITY TLS 1.3 encryption is strictly required to bypass censorship."
     );
-    let listener = TcpListener::bind(config.listen_addr).await?;
-
-    loop {
-        let (client, peer_addr) = match listener.accept().await {
-            Ok(res) => res,
-            Err(e) => {
-                tracing::warn!("TCP accept error: {}", e);
-                continue;
-            }
-        };
-
-        let cfg = Arc::clone(&config);
-        tokio::spawn(async move {
-            if let Err(e) = handle_connection(client, cfg).await {
-                tracing::debug!("Connection ended from {}: {}", peer_addr, e);
-            }
-        });
-    }
-}
-
-async fn handle_connection(mut client: TcpStream, config: Arc<ServerConfig>) -> Result<()> {
-    // Enable TCP_NODELAY immediately
-    client.set_nodelay(true).ok();
-
-    // Read initial TLS ClientHello frame (peek or initial buffer)
-    let mut initial_buf = [0u8; 1024];
-    let n = client.read(&mut initial_buf).await?;
-    if n == 0 {
-        return Ok(());
-    }
-
-    let raw_initial = &initial_buf[..n];
-
-    // Sniff the TLS ClientHello and determine whether it is an authorized REALITY client or scanner
-    match inspect_tls_client_hello(raw_initial, &config) {
-        HandshakeVerdict::Authenticated { .. } => {
-            tracing::info!("Authenticated REALITY client handshake verified");
-            // The client continues directly into the VLESS protocol layer
-            let req = parse_vless_request(&mut client, &config.user_uuid).await?;
-            tunnel_vless_connection(client, req).await?;
-        }
-        HandshakeVerdict::Fallback => {
-            // Forward scanner or web probe transparently to legitimate destination (e.g. gateway.icloud.com)
-            handle_fallback(client, raw_initial, &config.dest_target).await?;
-        }
-    }
-
-    Ok(())
 }
