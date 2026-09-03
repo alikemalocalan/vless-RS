@@ -1,5 +1,5 @@
 # Multi-stage production build for Railway & Docker deployments
-FROM rust:latest AS builder
+FROM rust:bookworm AS builder
 
 WORKDIR /usr/src/vless-RS
 
