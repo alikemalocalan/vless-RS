@@ -9,7 +9,7 @@ pub const DEFAULT_DEST: &str = "gateway.icloud.com:443";
 pub const DEFAULT_SNI: &str = "gateway.icloud.com";
 
 #[derive(Parser, Debug, Clone)]
-#[command(name = "vless-vpn")]
+#[command(name = "vless-RS")]
 #[command(about = "High-performance standalone VLESS + RAW + REALITY server in Rust for TSPU/DPI circumvention")]
 pub struct Opts {
     #[arg(short, long, env = "PORT", default_value = "8080")]

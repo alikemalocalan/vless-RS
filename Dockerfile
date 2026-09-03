@@ -1,7 +1,7 @@
 # Multi-stage production build for Railway & Docker deployments
 FROM rust:latest AS builder
 
-WORKDIR /usr/src/vless-vpn
+WORKDIR /usr/src/vless-RS
 
 # Pre-cache dependencies
 COPY Cargo.toml Cargo.lock* ./
@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY --from=builder /usr/src/vless-vpn/target/release/vless-vpn /app/vless-vpn
+COPY --from=builder /usr/src/vless-RS/target/release/vless-RS /app/vless-RS
 
 ENV PORT=8080
 ENV BIND=0.0.0.0
@@ -30,4 +30,4 @@ ENV SNI=gateway.icloud.com
 
 EXPOSE 8080
 
-ENTRYPOINT ["/app/vless-vpn"]
+ENTRYPOINT ["/app/vless-RS"]
