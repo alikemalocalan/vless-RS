@@ -128,11 +128,16 @@ pub async fn tunnel_vless_connection(
     mut client: TcpStream,
     req: VlessRequest,
 ) -> Result<()> {
-    let dest_str = format!("{}:{}", req.target_addr, req.target_port);
+    let dest_display = if req.target_addr.contains(':') && !req.target_addr.starts_with('[') {
+        format!("[{}]:{}", req.target_addr, req.target_port)
+    } else {
+        format!("{}:{}", req.target_addr, req.target_port)
+    };
+
     tracing::info!(
         "VLESS tunnel established: [UUID: {}] -> {}",
         req.uuid,
-        dest_str
+        dest_display
     );
 
     // Send successful response header to the client
@@ -140,10 +145,10 @@ pub async fn tunnel_vless_connection(
         .await
         .context("Failed to send VLESS response header")?;
 
-    // Connect to outbound destination target
-    let mut remote = TcpStream::connect(&dest_str)
+    // Connect to outbound destination target (supports Domain, IPv4, and IPv6)
+    let mut remote = TcpStream::connect((req.target_addr.as_str(), req.target_port))
         .await
-        .with_context(|| format!("Failed to connect to VLESS target {}", dest_str))?;
+        .with_context(|| format!("Failed to connect to VLESS target {}", dest_display))?;
 
     // Enable TCP_NODELAY for minimum latency
     remote.set_nodelay(true).ok();
@@ -205,5 +210,28 @@ mod tests {
         assert_eq!(req.uuid, expected_uuid);
         assert_eq!(req.target_port, 443);
         assert_eq!(req.target_addr, "www.instagram.com");
+    }
+
+    #[tokio::test]
+    async fn test_parse_vless_ipv6_request() {
+        let expected_uuid = Uuid::new_v4();
+        let mut data = Vec::new();
+        data.push(0x00); // Version
+        data.extend_from_slice(expected_uuid.as_bytes()); // UUID
+        data.push(0x00); // Addons len
+        data.push(CMD_TCP); // Command
+        data.extend_from_slice(&80u16.to_be_bytes()); // Port
+        data.push(ATYP_IPV6); // Address type
+        let ipv6_bytes = [0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+        data.extend_from_slice(&ipv6_bytes);
+
+        let mut cursor = Cursor::new(data);
+        let req = parse_vless_request(&mut cursor, &expected_uuid)
+            .await
+            .unwrap();
+
+        assert_eq!(req.uuid, expected_uuid);
+        assert_eq!(req.target_port, 80);
+        assert_eq!(req.target_addr, "2001:db8::1");
     }
 }

@@ -76,7 +76,13 @@ impl std::fmt::Debug for ServerConfig {
 
 impl ServerConfig {
     pub fn from_opts(opts: Opts) -> Result<Self> {
-        let listen_addr: SocketAddr = format!("{}:{}", opts.bind, opts.port).parse()?;
+        let bind_str = opts.bind.trim();
+        let clean_bind = bind_str.trim_matches(|c| c == '[' || c == ']');
+        let listen_addr: SocketAddr = if let Ok(ip) = clean_bind.parse::<std::net::IpAddr>() {
+            SocketAddr::new(ip, opts.port)
+        } else {
+            format!("{}:{}", bind_str, opts.port).parse()?
+        };
 
         // 1. UUID handling
         let user_uuid = match opts.uuid {
@@ -175,10 +181,16 @@ impl ServerConfig {
         );
         let short_id_hex = hex::encode(&self.short_id);
 
+        let formatted_addr = if self.public_address.contains(':') && !self.public_address.starts_with('[') {
+            format!("[{}]", self.public_address)
+        } else {
+            self.public_address.clone()
+        };
+
         format!(
             "vless://{}@{}:{}?encryption=none&flow=&security=reality&sni={}&fp=chrome&pbk={}&sid={}&type=tcp&headerType=none#Russia-TSPU-Bypass-Rust",
             self.user_uuid,
-            self.public_address,
+            formatted_addr,
             self.public_port,
             self.server_name,
             pub_key_b64,
