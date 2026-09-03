@@ -15,14 +15,94 @@ fn generate_ascii_qr(data: &str) -> Option<String> {
 }
 
 
-pub async fn run_server(config: Arc<ServerConfig>) -> Result<()> {
-    let listener = TcpListener::bind(config.listen_addr).await?;
-    tracing::info!(
-        "VLESS+REALITY Server running on {} [Camouflage: {}]",
-        config.listen_addr,
-        config.dest_target
-    );
+use std::path::PathBuf;
 
+fn find_xray_binary() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("XRAY_PATH") {
+        let pb = PathBuf::from(p);
+        if pb.exists() {
+            return Some(pb);
+        }
+    }
+    for candidate in &["/usr/local/bin/xray", "/app/xray", "/tmp/xray_bin/xray"] {
+        let pb = PathBuf::from(candidate);
+        if pb.exists() {
+            return Some(pb);
+        }
+    }
+    if let Ok(out) = std::process::Command::new("which").arg("xray").output() {
+        if out.status.success() {
+            let path_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !path_str.is_empty() {
+                return Some(PathBuf::from(path_str));
+            }
+        }
+    }
+    None
+}
+
+pub fn generate_xray_config(config: &ServerConfig) -> String {
+    let priv_key_b64 = base64::Engine::encode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        config.private_key.as_bytes(),
+    );
+    let short_id_hex = hex::encode(&config.short_id);
+
+    format!(
+r#"{{
+  "log": {{
+    "loglevel": "warning"
+  }},
+  "inbounds": [
+    {{
+      "port": {},
+      "listen": "{}",
+      "protocol": "vless",
+      "settings": {{
+        "clients": [
+          {{
+            "id": "{}",
+            "flow": "xtls-rprx-vision"
+          }}
+        ],
+        "decryption": "none"
+      }},
+      "streamSettings": {{
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {{
+          "show": false,
+          "dest": "{}",
+          "xver": 0,
+          "serverNames": [
+            "{}"
+          ],
+          "privateKey": "{}",
+          "shortIds": [
+            "{}"
+          ]
+        }}
+      }}
+    }}
+  ],
+  "outbounds": [
+    {{
+      "protocol": "freedom",
+      "tag": "direct"
+    }}
+  ]
+}}"#,
+        config.listen_addr.port(),
+        config.listen_addr.ip(),
+        config.user_uuid,
+        config.dest_target,
+        config.server_name,
+        priv_key_b64,
+        short_id_hex
+    )
+}
+
+pub async fn run_server(config: Arc<ServerConfig>) -> Result<()> {
     // Print the ready-to-use Android one-click link and QR code on server startup
     let share_link = config.generate_vless_share_link();
     let qr_code = generate_ascii_qr(&share_link);
@@ -33,7 +113,7 @@ pub async fn run_server(config: Arc<ServerConfig>) -> Result<()> {
     let short_id_hex = hex::encode(&config.short_id);
 
     println!("\n===============================================================================");
-    println!("  🚀 VLESS + RAW + REALITY SERVER IS ACTIVE!");
+    println!("  🚀 VLESS + RAW + REALITY (XTLS-VISION) SERVER IS ACTIVE!");
     println!("===============================================================================");
     if config.is_railway {
         println!("  ☁️  ENVIRONMENT       : Railway Cloud Deployment");
@@ -77,6 +157,32 @@ pub async fn run_server(config: Arc<ServerConfig>) -> Result<()> {
     println!("  SHORT_ID={}", short_id_hex);
     println!("===============================================================================\n");
 
+    // If Xray engine is available, run Xray for full XTLS-Vision + REALITY TLS 1.3 support
+    if let Some(xray_path) = find_xray_binary() {
+        tracing::info!("Starting Xray-core REALITY engine from {:?}", xray_path);
+        let xray_config = generate_xray_config(&config);
+        let config_path = std::env::temp_dir().join("vless_xray_config.json");
+        tokio::fs::write(&config_path, xray_config).await?;
+
+        let mut child = tokio::process::Command::new(&xray_path)
+            .arg("run")
+            .arg("-c")
+            .arg(&config_path)
+            .spawn()?;
+
+        let status = child.wait().await?;
+        if !status.success() {
+            anyhow::bail!("Xray engine exited with status: {}", status);
+        }
+        return Ok(());
+    }
+
+    // Fallback to internal server loop if xray binary is not present
+    tracing::info!(
+        "VLESS server listening on {} (Internal engine)",
+        config.listen_addr
+    );
+    let listener = TcpListener::bind(config.listen_addr).await?;
 
     loop {
         let (client, peer_addr) = match listener.accept().await {

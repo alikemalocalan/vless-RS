@@ -17,7 +17,20 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Install official Xray-core for REALITY TLS 1.3 engine
+RUN ARCH=$(uname -m) && \
+    case "$ARCH" in \
+      x86_64) XRAY_ARCH="64" ;; \
+      aarch64) XRAY_ARCH="arm64-v8a" ;; \
+      *) XRAY_ARCH="64" ;; \
+    esac && \
+    curl -sL "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${XRAY_ARCH}.zip" -o /tmp/xray.zip && \
+    unzip -q /tmp/xray.zip -d /usr/local/bin xray && \
+    chmod +x /usr/local/bin/xray && \
+    rm -rf /tmp/xray.zip
 
 WORKDIR /app
 
