@@ -1,43 +1,44 @@
 # 🛡️ vless-RS — High-Performance VLESS + REALITY Proxy in Rust
 
-> **Ultra-low footprint (~12 MB RAM), zero-dependency, standalone VLESS + REALITY (XTLS-Vision) server built for DPI and censorship circumvention.**  
+> **Ultra-low footprint (~12 MB RAM), pure Rust architecture, zero-dependency VLESS + REALITY (XTLS-Vision) server built for DPI and censorship circumvention.**  
 > *Designed to bypass sophisticated national censorship systems (such as Russia TSPU, Iran, China GFW) using legitimate Apple/Google TLS 1.3 camouflage.*
 
 ---
 
 ## 🎯 Motivation & Background
 
-Sophisticated censorship apparatuses (like Russia's national TSPU/Rostelecom infrastructure, Iran, and China GFW) deploy deep packet inspection (DPI) boxes that actively fingerprint, throttle, or block traditional VPN protocols and proxy tunnels.
+Advanced national censorship systems (like Russia's TSPU/Rostelecom infrastructure, Iran's national firewall, and the GFW) deploy deep packet inspection (DPI) boxes that actively fingerprint, throttle, or block traditional VPN protocols and plain proxy tunnels.
 
 ### 💡 The Solution: VLESS + REALITY (XTLS-Vision)
-Instead of trying to obfuscate encrypted data within identifiable tunnels, **camouflage completely as legitimate HTTPS traffic to top-tier CDN/tech services**:
+Instead of attempting to obfuscate encrypted traffic within identifiable tunnels, **camouflage completely as legitimate HTTPS traffic to top-tier CDN/tech services**:
 - To any external DPI box or port scanner, the server appears **identical to Apple's `gateway.icloud.com:443`**.
-- Unauthorized scanners receive Apple's genuine TLS certificate and HTTP responses via transparent fallback. The censorship box cannot detect the presence of a proxy.
+- Unauthorized scanners receive Apple's genuine TLS certificate and HTTP responses via transparent fallback. The censorship middlebox cannot detect that a proxy exists.
 - Only authorized clients presenting the correct X25519 public key and short ID can complete the handshake and establish the VLESS tunnel.
+- **Strict REALITY Enforcement:** Unencrypted VLESS is deliberately disabled; full TLS 1.3 encryption is mandatory to prevent instant packet inspection and DPI blocking.
 
 ---
 
 ## ⚡ Key Features
 
-- 🚀 **100% Rust Architecture:** Powered by async Tokio and lightweight Rust proxy engines. No heavy Go runtimes or complex Python/Node setups.
+- 🚀 **100% Rust Architecture:** Powered by Tokio and high-performance Rust proxy engines. No heavy Go runtimes or complex Python/Node setups.
 - 🪶 **Ultra-Low Memory Footprint (~12 MB RAM):** Uses up to 6x less memory than Go-based alternatives (which idle at 75–80 MB and spike to 400+ MB during speed tests).
-- ⚡ **XTLS-Vision Direct Acceleration:** Bypasses double-encryption for TLS-in-TLS connections, delivering wire-speed throughput and minimal battery drain on mobile devices.
+- ⚡ **XTLS-Vision Direct Acceleration:** Bypasses double-encryption for TLS-in-TLS connections, delivering wire-speed throughput, reduced latency, and minimal mobile battery drain.
 - 🛡️ **Active Probe Immunity:** Unauthenticated probes, bots, or censors are transparently redirected to the target domain (`gateway.icloud.com:443`).
-- ☁️ **Cloud & Container Ready:** Fully compatible with Docker, Linux VPS, and cloud environments supporting TCP ports.
-- 📲 **Instant Android Setup:** Automatically prints an importable `vless://` link and a compact, scannable ASCII QR code directly to deployment logs.
+- ☁️ **Cloud & Container Ready:** Fully compatible with Docker, Linux VPS, Kubernetes, and cloud platforms supporting TCP networking.
+- 📲 **Instant Client Setup:** Automatically prints an importable `vless://` link and a compact, scannable ASCII QR code directly to the startup console logs.
 
 ---
 
 ## 🏗️ Architecture & Protocol Flow
 
 ```text
-[ Android Client (v2rayNG / NekoBox) ]
+[ Client (v2rayNG / NekoBox / FoXray) ]
                  │
-                 │  TLS 1.3 ClientHello
+                 │  TLS 1.3 ClientHello (uTLS Chrome Fingerprint)
                  │  - SNI: gateway.icloud.com
                  │  - SessionID: Client Ephemeral Key + Encrypted ShortID
                  ▼
-      [ vless-RS (Port 8080 / TCP Proxy) ]
+          [ vless-RS Server ]
                  │
                  ├──► [1. REALITY TLS 1.3 Handshake Inspection]
                  │
@@ -50,40 +51,79 @@ Instead of trying to obfuscate encrypted data within identifiable tunnels, **cam
                       ├── X25519 ECDH Key Exchange & AEAD Session Decryption
                       ├── Short ID Validation Verified!
                       ├── VLESS Header Parsing (UUID, Destination Target)
-                      └──► Zero-Copy Async Outbound Tunneling (Instagram, YouTube, etc.)
+                      └──► Zero-Copy Async Outbound Tunneling (Instagram, YouTube, X)
 ```
 
 ---
 
-## 📱 Client Setup (Android / iOS / Desktop)
+## 🚀 Quick Start with Docker
 
-### Android (v2rayNG / NekoBox)
-1. Copy the `vless://...` URL or scan the QR code displayed in the server startup logs.
-2. Open **v2rayNG** (available on Google Play or GitHub Releases).
-3. Tap **+** -> **Scan QR Code** (or **Import config from clipboard**).
-4. Select the created configuration and tap the **V** connect button.
-5. All blocked services (Instagram, YouTube, X, Google) are now accessible.
+### 1. Build and Run
+
+```bash
+# Clone repository
+git clone https://github.com/alikemalocalan/vless-RS.git
+cd vless-RS
+
+# Build Docker image
+docker build -t vless-rs .
+
+# Run container
+docker run -d --name vless-rs -p 8080:8080 --restart always vless-rs
+```
+
+### 2. View Connection Link and QR Code
+
+```bash
+docker logs vless-rs
+```
+
+The server displays a clean, compact startup screen with your ready-to-import configuration:
+
+```text
+===============================================================================
+  🚀 VLESS + REALITY (XTLS-VISION) SERVER ACTIVE
+  🌐 ADDRESS   : your-server-ip:8080
+-------------------------------------------------------------------------------
+  📲 ANDROID LINK:
+  vless://uuid@your-server-ip:8080?security=reality&sni=gateway.icloud.com&fp=chrome&pbk=...&sid=...&type=tcp&flow=xtls-rprx-vision#vless-RS
+-------------------------------------------------------------------------------
+  📷 QR CODE:
+  [Compact Scannable ASCII QR Code]
+===============================================================================
+```
 
 ---
 
-## ⚙️ Environment Variables
+## 📱 Supported Clients
+
+| Platform | Recommended Client | Import Method |
+|---|---|---|
+| **Android** | [v2rayNG](https://github.com/2dust/v2rayNG) / [NekoBox](https://github.com/MatsuriDayo/NekoBoxForAndroid) | Scan QR code or import `vless://` from clipboard |
+| **iOS** | [FoXray](https://apps.apple.com/app/foxray/id6448898396) / [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118) | Scan QR code or import URL |
+| **Windows** | [v2rayN](https://github.com/2dust/v2rayN) / [Nekoray](https://github.com/MatsuriDayo/nekoray) | Paste `vless://` URL |
+| **macOS / Linux** | [sing-box](https://github.com/SagerNet/sing-box) / [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) | Import configuration URL |
+
+---
+
+## ⚙️ Configuration & Environment Variables
 
 Configure server runtime parameters via environment variables or CLI flags:
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `8080` | Local listen port |
-| `BIND` | `0.0.0.0` | Network interface to bind (`0.0.0.0` for IPv4, `::` for dual-stack) |
-| `UUID` | *Auto-generated* | VLESS user authentication UUID |
-| `PRIVATE_KEY` | *Auto-generated* | REALITY X25519 32-byte private key (base64 URL-safe or hex) |
-| `SHORT_ID` | *Auto-generated* | REALITY Short ID for client verification (hex) |
-| `DEST` | `gateway.icloud.com:443` | Legitimate camouflage destination for fallback |
-| `SNI` | `gateway.icloud.com` | Target server name indicated in the TLS ClientHello |
-| `SERVER_ADDRESS`| *Auto-detected* | Public host/domain written to the generated link |
-| `SERVER_PORT` | `$PORT` | Public port written to the generated link |
+| Variable | CLI Flag | Default | Description |
+|---|---|---|---|
+| `PORT` | `--port` | `8080` | Local TCP listen port |
+| `BIND` | `--bind` | `0.0.0.0` | Network interface to bind (`0.0.0.0` for IPv4, `::` for dual-stack) |
+| `UUID` | `--uuid` | *Auto-generated* | VLESS user authentication UUID |
+| `PRIVATE_KEY` | `--private-key` | *Auto-generated* | REALITY X25519 32-byte private key (base64 URL-safe or hex) |
+| `SHORT_ID` | `--short-id` | *Auto-generated* | REALITY Short ID for client verification (hex) |
+| `DEST` | `--dest` | `gateway.icloud.com:443` | Legitimate camouflage destination for fallback |
+| `SNI` | `--sni` | `gateway.icloud.com` | Target server name indicated in the TLS ClientHello |
+| `SERVER_ADDRESS`| `--server-address`| *Auto-detected* | Public host/domain written to the generated link |
+| `SERVER_PORT` | `--server-port` | `$PORT` | Public port written to the generated link |
 
 > [!TIP]
-> **Persistent Configuration:** To keep your connection link and keys identical across future server restarts, set the `UUID`, `SHORT_ID`, and `PRIVATE_KEY` environment variables.
+> **Persistent Configuration:** To keep your client connection link and keys identical across future server restarts, set the `UUID`, `SHORT_ID`, and `PRIVATE_KEY` environment variables.
 
 ---
 
@@ -99,7 +139,7 @@ cargo build --release
 # Run with custom camouflage target and port
 ./target/release/vless-RS --port 8080 --dest dl.google.com:443 --sni dl.google.com
 
-# Run test suite
+# Run unit tests
 cargo test
 ```
 
