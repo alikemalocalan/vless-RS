@@ -9,9 +9,13 @@ use crate::reality::handshake::{inspect_tls_client_hello, HandshakeVerdict};
 use crate::vless::protocol::{parse_vless_request, tunnel_vless_connection};
 
 fn generate_ascii_qr(data: &str) -> Option<String> {
-    qrcode::QrCode::new(data.as_bytes())
+    qrcode::QrCode::with_error_correction_level(data.as_bytes(), qrcode::EcLevel::L)
         .ok()
-        .map(|code| code.render::<qrcode::render::unicode::Dense1x2>().build())
+        .map(|code| {
+            code.render::<qrcode::render::unicode::Dense1x2>()
+                .quiet_zone(false)
+                .build()
+        })
 }
 
 
@@ -160,67 +164,53 @@ pub async fn run_server(config: Arc<ServerConfig>) -> Result<()> {
     // Print the ready-to-use Android one-click link and QR code on server startup
     let share_link = config.generate_vless_share_link();
     let qr_code = generate_ascii_qr(&share_link);
-    let pub_key_b64 = base64::Engine::encode(
-        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-        config.public_key.as_bytes(),
-    );
-    let short_id_hex = hex::encode(&config.short_id);
 
     println!("\n===============================================================================");
-    println!("  🚀 VLESS + RAW + REALITY (XTLS-VISION) SERVER IS ACTIVE!");
-    println!("===============================================================================");
-    if config.is_railway {
-        println!("  ☁️  ENVIRONMENT       : Railway Cloud Deployment");
-        if config.has_tcp_proxy {
-            println!("  🌐 TCP PROXY         : ✅ Active ({}:{})", config.public_address, config.public_port);
-        } else {
-            println!("  🌐 TCP PROXY         : ⚠️  Action Required!");
-            println!("                         Go to Railway Dashboard -> Settings -> Networking -> Enable 'TCP Proxy'");
-            println!("                         (Railway will assign your public domain and port)");
-        }
+    println!("  🚀 VLESS + REALITY (XTLS-VISION) SERVER ACTIVE");
+    if config.is_railway && config.has_tcp_proxy {
+        println!("  🌐 TCP PROXY : {}:{}", config.public_address, config.public_port);
     } else {
-        println!("  🖥️  ENVIRONMENT       : Standalone / Local Server");
+        println!("  🌐 ADDRESS   : {}:{}", config.public_address, config.public_port);
     }
     println!("-------------------------------------------------------------------------------");
-    println!("  🔑 PARAMETERS:");
-    println!("  UUID                 : {}", config.user_uuid);
-    println!("  Public Host          : {}", config.public_address);
-    println!("  Public Port          : {}", config.public_port);
-    println!("  Camouflage Target    : {}", config.dest_target);
-    println!("  SNI                  : {}", config.server_name);
-    println!("  Public Key (pbk)     : {}", pub_key_b64);
-    println!("  Short ID (sid)       : {}", short_id_hex);
-    println!("-------------------------------------------------------------------------------");
-    println!("  📲 ANDROID IMPORT LINK (Copy to Clipboard):");
+    println!("  📲 ANDROID LINK:");
     println!("  {}", share_link);
-    println!("-------------------------------------------------------------------------------");
     if let Some(ref qr) = qr_code {
-        println!("  📷 SCAN QR CODE WITH ANDROID CAMERA (v2rayNG / NekoBox):");
-        println!("{}", qr);
         println!("-------------------------------------------------------------------------------");
+        println!("  📷 QR CODE:");
+        println!("{}", qr);
     }
-    println!("  📱 ANDROID SETUP GUIDE:");
-    println!("  1. Open v2rayNG or NekoBox on your Android device");
-    println!("  2. Tap '+' -> 'Scan QR code' (or 'Import config from clipboard')");
-    println!("  3. Select the profile and tap the 'V' connect button!");
-    println!("-------------------------------------------------------------------------------");
-    println!("  💡 TIP (Railway Redeployment Persistence):");
-    println!("  Set these variables in your Railway Project Settings -> Variables");
-    println!("  to prevent keys from changing on future redeployments:");
-    println!("  UUID={}", config.user_uuid);
-    println!("  SHORT_ID={}", short_id_hex);
     println!("===============================================================================\n");
 
     // 1. Priority: Pure Rust shoes engine (Ultra-low ~12 MB RAM, VLESS + REALITY + Vision)
     if let Some(shoes_path) = find_shoes_binary() {
-        tracing::info!("Starting pure Rust shoes REALITY engine (~12 MB RAM) from {:?}", shoes_path);
         let shoes_config = generate_shoes_config(&config);
         let config_path = std::env::temp_dir().join("shoes_config.yaml");
         tokio::fs::write(&config_path, shoes_config).await?;
 
         let mut child = tokio::process::Command::new(&shoes_path)
+            .arg("--no-reload")
             .arg(&config_path)
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::piped())
             .spawn()?;
+
+        if let Some(stderr) = child.stderr.take() {
+            tokio::spawn(async move {
+                use tokio::io::{AsyncBufReadExt, BufReader};
+                let mut lines = BufReader::new(stderr).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    // Filter out harmless port probes, scanner errors, and invalid TLS handshake attempts
+                    if line.contains("Invalid TLS protocol version")
+                        || line.contains("Session ID decrypt failed")
+                        || line.contains("failed to setup server stream")
+                    {
+                        continue;
+                    }
+                    eprintln!("{}", line);
+                }
+            });
+        }
 
         let status = child.wait().await?;
         if !status.success() {

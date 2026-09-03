@@ -188,7 +188,7 @@ impl ServerConfig {
         };
 
         format!(
-            "vless://{}@{}:{}?encryption=none&flow=xtls-rprx-vision&security=reality&sni={}&fp=chrome&pbk={}&sid={}&type=tcp&headerType=none#vless-RS",
+            "vless://{}@{}:{}?security=reality&sni={}&fp=chrome&pbk={}&sid={}&type=tcp&flow=xtls-rprx-vision#vless-RS",
             self.user_uuid,
             formatted_addr,
             self.public_port,
