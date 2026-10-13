@@ -1,0 +1,13 @@
+{{GLOBAL_LIMITS}}- address: "{{LISTEN_ADDR}}"
+  protocol:
+    type: tls
+    shadowtls_targets:
+      "{{SERVER_NAME}}":
+        password: "{{PASSWORD}}"
+        handshake:
+          address: "{{DEST}}"
+        protocol:
+          type: vless
+          user_id: "{{UUID}}"
+          udp_enabled: {{UDP_ENABLED}}
+{{RULES}}

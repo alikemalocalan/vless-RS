@@ -1,0 +1,14 @@
+{{GLOBAL_LIMITS}}- address: "{{LISTEN_ADDR}}"
+  protocol:
+    type: tls
+    reality_targets:
+      "{{SERVER_NAME}}":
+        private_key: "{{PRIVATE_KEY}}"
+        short_ids: ["{{SHORT_ID}}"]
+        dest: "{{DEST}}"
+        vision: true
+        protocol:
+          type: vless
+          user_id: "{{UUID}}"
+          udp_enabled: {{UDP_ENABLED}}
+{{RULES}}

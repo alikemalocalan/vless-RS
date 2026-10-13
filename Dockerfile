@@ -9,6 +9,7 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && r
 
 # Copy source code and build production binary
 COPY src ./src
+COPY config ./config
 RUN touch src/main.rs && cargo build --release
 
 # Final lightweight runtime image
@@ -27,7 +28,7 @@ RUN ARCH=$(uname -m) && \
       aarch64) SHOES_ARCH="aarch64" ;; \
       *) SHOES_ARCH="x86_64" ;; \
     esac && \
-    curl -sL "https://github.com/cfal/shoes/releases/download/v0.2.7/shoes-${SHOES_ARCH}-unknown-linux-musl.tar.gz" -o /tmp/shoes.tar.gz && \
+    curl -sL "https://github.com/cfal/shoes/releases/download/v0.3.2/shoes-${SHOES_ARCH}-unknown-linux-musl.tar.gz" -o /tmp/shoes.tar.gz && \
     tar -xzf /tmp/shoes.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/shoes && \
     rm -rf /tmp/shoes.tar.gz
@@ -35,6 +36,7 @@ RUN ARCH=$(uname -m) && \
 WORKDIR /app
 
 COPY --from=builder /usr/src/vless-RS/target/release/vless-RS /app/vless-RS
+COPY config /app/config
 
 ENV PORT=8080
 ENV BIND=0.0.0.0

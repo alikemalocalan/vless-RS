@@ -40,6 +40,38 @@ pub struct Opts {
     /// External public port if different from internal listen port (e.g. Railway TCP port)
     #[arg(long, env = "SERVER_PORT")]
     pub server_port: Option<u16>,
+
+    /// Transport security protocol: "reality" (default) or "shadowtls" (anti-SNI correlation)
+    #[arg(long, env = "PROTOCOL", default_value = "reality")]
+    pub protocol: String,
+
+    /// Password for ShadowTLS v3 handshake (auto-generated if omitted)
+    #[arg(long, env = "SHADOWTLS_PASSWORD")]
+    pub shadowtls_password: Option<String>,
+
+    /// Enable UDP multiplexing (XUDP / UDP-over-TCP) over the encrypted TLS stream
+    #[arg(long, env = "ENABLE_UDP", default_value_t = true)]
+    pub udp_enabled: bool,
+
+    /// Upstream SOCKS5/HTTP proxy for outbound traffic (e.g. 127.0.0.1:8080 for greentunnelRS)
+    #[arg(long, env = "UPSTREAM_PROXY")]
+    pub upstream_proxy: Option<String>,
+
+    /// Cloudflare Clean IP mapping to bypass TSPU/ISP Anycast 104.21.x / 172.67.x blocks
+    #[arg(long, env = "CLOUDFLARE_CLEAN_IP", default_value = "104.16.132.229")]
+    pub cf_clean_ip: Option<String>,
+
+    /// Maximum concurrent connections for shoes engine (optional, unlimited if omitted)
+    #[arg(long, env = "MAX_CONNECTIONS")]
+    pub max_connections: Option<usize>,
+
+    /// Maximum concurrent streams for shoes engine (optional, unlimited if omitted)
+    #[arg(long, env = "MAX_STREAMS")]
+    pub max_streams: Option<usize>,
+
+    /// Reload grace period in seconds for TCP draining (default: 300)
+    #[arg(long, env = "RELOAD_GRACE_SECS")]
+    pub reload_grace_secs: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -55,6 +87,14 @@ pub struct ServerConfig {
     pub public_port: u16,
     pub is_railway: bool,
     pub has_tcp_proxy: bool,
+    pub protocol: String,
+    pub shadowtls_password: Option<String>,
+    pub udp_enabled: bool,
+    pub upstream_proxy: Option<String>,
+    pub cf_clean_ip: Option<String>,
+    pub max_connections: Option<usize>,
+    pub max_streams: Option<usize>,
+    pub reload_grace_secs: Option<u64>,
 }
 
 impl std::fmt::Debug for ServerConfig {
@@ -158,6 +198,33 @@ impl ServerConfig {
             .or(tcp_proxy_port)
             .unwrap_or(opts.port);
 
+        let shadowtls_password = if opts.protocol.eq_ignore_ascii_case("shadowtls") {
+            Some(opts.shadowtls_password.unwrap_or_else(|| {
+                let mut rnd = [0u8; 16];
+                for b in &mut rnd {
+                    *b = fastrand::u8(..);
+                }
+                hex::encode(rnd)
+            }))
+        } else {
+            None
+        };
+
+        let cf_clean_ip = opts
+            .cf_clean_ip
+            .filter(|s| !s.trim().is_empty() && s.trim() != "none" && s.trim() != "disable");
+        let upstream_proxy = opts.upstream_proxy.filter(|s| !s.trim().is_empty());
+
+        let max_connections = opts
+            .max_connections
+            .or_else(|| std::env::var("SHOES_MAX_CONNECTIONS").ok().and_then(|v| v.parse().ok()));
+        let max_streams = opts
+            .max_streams
+            .or_else(|| std::env::var("SHOES_MAX_STREAMS").ok().and_then(|v| v.parse().ok()));
+        let reload_grace_secs = opts
+            .reload_grace_secs
+            .or_else(|| std::env::var("SHOES_RELOAD_GRACE_SECS").ok().and_then(|v| v.parse().ok()));
+
         Ok(Self {
             listen_addr,
             user_uuid,
@@ -170,6 +237,14 @@ impl ServerConfig {
             public_port,
             is_railway,
             has_tcp_proxy,
+            protocol: opts.protocol,
+            shadowtls_password,
+            udp_enabled: opts.udp_enabled,
+            upstream_proxy,
+            cf_clean_ip,
+            max_connections,
+            max_streams,
+            reload_grace_secs,
         })
     }
 
@@ -196,6 +271,27 @@ impl ServerConfig {
             pub_key_b64,
             short_id_hex
         )
+    }
+
+    /// Formats the appropriate share link based on active protocol (REALITY or ShadowTLS v3)
+    pub fn generate_share_link(&self) -> String {
+        if self.protocol.eq_ignore_ascii_case("shadowtls") {
+            let password = self.shadowtls_password.as_deref().unwrap_or("shadowtls-secret");
+            let formatted_addr = if self.public_address.contains(':') && !self.public_address.starts_with('[') {
+                format!("[{}]", self.public_address)
+            } else {
+                self.public_address.clone()
+            };
+            format!(
+                "shadow-tls://{}@{}:{}?sni={}#vless-RS-ShadowTLS",
+                password,
+                formatted_addr,
+                self.public_port,
+                self.server_name
+            )
+        } else {
+            self.generate_vless_share_link()
+        }
     }
 }
 

@@ -114,6 +114,11 @@ Configure server runtime parameters via environment variables or CLI flags:
 |---|---|---|---|
 | `PORT` | `--port` | `8080` | Local TCP listen port |
 | `BIND` | `--bind` | `0.0.0.0` | Network interface to bind (`0.0.0.0` for IPv4, `::` for dual-stack) |
+| `PROTOCOL` | `--protocol` | `reality` | Proxy protocol (`reality` or `shadowtls`) |
+| `ENABLE_UDP` | `--enable-udp` | `true` | SagerNet UDP-over-TCP (XUDP) multiplexing to bypass UDP 443/53 blocking |
+| `CLOUDFLARE_CLEAN_IP`| `--cloudflare-clean-ip` | *(optional)* | Clean Cloudflare IP (e.g. `104.16.132.229`) to bypass TSPU Anycast blocks |
+| `UPSTREAM_PROXY` | `--upstream-proxy` | *(optional)* | Upstream proxy (e.g. `127.0.0.1:8080` or `socks5://...`) to chain with `greentunnelRS` |
+| `SHADOWTLS_PASSWORD` | `--shadowtls-password` | *Auto-generated* | Shared secret password when running in `shadowtls` protocol mode |
 | `UUID` | `--uuid` | *Auto-generated* | VLESS user authentication UUID |
 | `PRIVATE_KEY` | `--private-key` | *Auto-generated* | REALITY X25519 32-byte private key (base64 URL-safe or hex) |
 | `SHORT_ID` | `--short-id` | *Auto-generated* | REALITY Short ID for client verification (hex) |
@@ -121,9 +126,23 @@ Configure server runtime parameters via environment variables or CLI flags:
 | `SNI` | `--sni` | `gateway.icloud.com` | Target server name indicated in the TLS ClientHello |
 | `SERVER_ADDRESS`| `--server-address`| *Auto-detected* | Public host/domain written to the generated link |
 | `SERVER_PORT` | `--server-port` | `$PORT` | Public port written to the generated link |
+| `MAX_CONNECTIONS`| `--max-connections`| *(unlimited)* | Process-wide connection limit for shoes engine |
+| `MAX_STREAMS` | `--max-streams` | *(unlimited)* | Process-wide stream limit for multiplexed protocols |
+| `RELOAD_GRACE_SECS`| `--reload-grace-secs`| `300` | Grace period in seconds for TCP connection draining |
 
 > [!TIP]
 > **Persistent Configuration:** To keep your client connection link and keys identical across future server restarts, set the `UUID`, `SHORT_ID`, and `PRIVATE_KEY` environment variables.
+
+---
+
+## 🛡️ Advanced Anti-Censorship & DPI Evasion
+
+`vless-RS` includes built-in mitigations for aggressive TSPU and state-level DPI engines:
+
+1. **UDP-over-TCP Multiplexing (XUDP):** Enabled by default (`--enable-udp true`). Censors frequently drop or throttle UDP (HTTP/3 QUIC, WireGuard, DNS on UDP 53). XUDP encapsulates all client UDP traffic inside the established TLS 1.3 TCP stream.
+2. **Cloudflare Clean Anycast Remapping:** State DPI systems frequently block entire Cloudflare Anycast subnets (`104.21.0.0/16`, `172.67.0.0/16`). Set `--cloudflare-clean-ip 104.16.132.229` (or any unblocked CF IP) to transparently remap outbound traffic to unblocked ranges.
+3. **Upstream Chaining with `greentunnelRS`:** Run [greentunnelRS](https://github.com/alikemalocalan/greentunnelRS) locally on port 8080 or socks5 port 1080 and pass `--upstream-proxy 127.0.0.1:8080`. Outbound connections automatically benefit from packet-level desynchronization (TCP OOB desync, SNI midpoint splitting, and TLS Record fragmentation).
+4. **ShadowTLS v3 Dual Protocol Mode:** When middleboxes perform active SNI-to-IP correlation checks on REALITY camouflage hosts, switch to `--protocol shadowtls` to establish genuine Dual-Handshake camouflage with any remote host.
 
 ---
 
@@ -138,6 +157,9 @@ cargo build --release
 
 # Run with custom camouflage target and port
 ./target/release/vless-RS --port 8080 --dest dl.google.com:443 --sni dl.google.com
+
+# Run with upstream DPI-evasion proxy and Cloudflare clean IP
+./target/release/vless-RS --upstream-proxy 127.0.0.1:8080 --cloudflare-clean-ip 104.16.132.229
 
 # Run unit tests
 cargo test
